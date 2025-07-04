@@ -1,50 +1,60 @@
-//****************************************Copyright (c)***********************************//
-//原子哥在线教学平台：www.yuanzige.com
-//技术支持：www.openedv.com
-//淘宝店铺：http://openedv.taobao.com 
-//关注微信公众平台微信号："正点原子"，免费获取ZYNQ & FPGA & STM32 & LINUX资料。
-//版权所有，盗版必究。
-//Copyright(C) 正点原子 2018-2028
-//All rights reserved
-//----------------------------------------------------------------------------------------
-// File name:           asyn_rst_syn
-// Last modified Date:  2019/7/1 9:30:00
-// Last Version:        V1.1
-// Descriptions:        异步复位，同步释放，并转换成高电平有效
-//----------------------------------------------------------------------------------------
-// Created by:          正点原子
-// Created date:        2019/7/1 9:30:00
-// Version:             V1.0
-// Descriptions:        The original version
+`timescale 1ns / 1ps
+
+//////////////////////////////////////////////////////////////////////////////////
 //
-//----------------------------------------------------------------------------------------
-//****************************************************************************************//
+// Module Name:   asyn_rst_syn
+// Description:
+//   This module handles a common and critical task in digital design:
+//   synchronizing an asynchronous reset signal to a destination clock domain.
+//   It takes an active-low asynchronous reset input and produces an
+//   active-high synchronous reset output.
+//
+//   Functionality:
+//   1. Asynchronous Assertion: The reset asserts immediately when reset_n goes low.
+//   2. Synchronous De-assertion: The reset is released (de-asserted) in sync
+//      with the destination clock to prevent metastability issues.
+//   3. Polarity Inversion: Converts the active-low input reset to an
+//      active-high output reset.
+//
+//////////////////////////////////////////////////////////////////////////////////
 
 module asyn_rst_syn(
-    input clk,          //目的时钟域
-    input reset_n,      //异步复位，低有效
+    // Inputs
+    input clk,          // Input: Clock signal of the destination domain.
+    input reset_n,      // Input: Active-low asynchronous reset from an external source.
     
-    output syn_reset    //高有效
-    );
+    // Output
+    output syn_reset    // Output: Active-high synchronous reset for the destination clock domain.
+);
     
-//reg define
+// Internal registers for the 2-stage synchronizer chain.
 reg reset_1;
 reg reset_2;
     
-//*****************************************************
-//**                    main code
-//***************************************************** 
-assign syn_reset  = reset_2;
+//==============================================================================
+// Main Code
+//==============================================================================
+
+// The output reset is directly driven by the second stage of the synchronizer.
+assign syn_reset = reset_2;
     
-//对异步复位信号进行同步释放，并转换成高有效
-always @ (posedge clk or negedge reset_n) begin
-    if(!reset_n) begin
+// This always block implements the asynchronous reset and synchronous release logic.
+always @(posedge clk or negedge reset_n) begin
+    // Asynchronous Assertion:
+    // When reset_n is asserted (goes low), immediately force both synchronizer
+    // stages high. This makes the output 'syn_reset' go high instantly.
+    if (!reset_n) begin
         reset_1 <= 1'b1;
         reset_2 <= 1'b1;
     end
+    // Synchronous De-assertion:
+    // When reset_n is de-asserted (goes high), this part of the logic is
+    // controlled by the rising edge of 'clk'.
     else begin
-        reset_1 <= 1'b0;
-        reset_2 <= reset_1;
+        reset_1 <= 1'b0;          // The first stage is driven low.
+        reset_2 <= reset_1;       // The second stage captures the value of the first,
+                                  // ensuring the reset signal is cleanly de-asserted
+                                  // in sync with the clock.
     end
 end
     
