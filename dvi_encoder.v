@@ -2,10 +2,6 @@
 
 //////////////////////////////////////////////////////////////////////////////////
 //
-// Company:       Xilinx, Inc.
-// Engineer:      Bob Feng
-//
-// Create Date:   Jan. 2008
 // Module Name:   dvi_encoder
 // Description:
 //   This module implements the Transition-Minimized Differential Signaling (TMDS)
