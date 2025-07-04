@@ -1,108 +1,116 @@
 `timescale 1ns / 1ps
 
-module serializer_10_to_1(
-    input           reset,              // 复位,高有效
-    input           paralell_clk,       // 输入并行数据时钟
-    input           serial_clk_5x,      // 输入串行数据时钟
-    input   [9:0]   paralell_data,      // 输入并行数据
+//////////////////////////////////////////////////////////////////////////////////
+//
+// Module Name:   serializer_10_to_1
+// Description:
+//   This module implements a 10-to-1 parallel-to-serial converter using two
+//   cascaded Xilinx OSERDESE2 primitives. It takes a 10-bit parallel data word
+//   at a slower clock rate (paralell_clk) and outputs a single-bit serial stream
+//   at 10x the parallel clock rate. This is achieved by using a 5x serial clock
+//   and DDR (Double Data Rate) mode on the output.
+//
+//////////////////////////////////////////////////////////////////////////////////
 
-    output 			serial_data_out     // 输出串行数据
-    );
+module serializer_10_to_1 (
+    // Inputs
+    input  wire        reset,           // Input: Active-high synchronous reset.
+    input  wire        paralell_clk,    // Input: Parallel data clock (e.g., 74.25MHz).
+    input  wire        serial_clk_5x,   // Input: High-speed serial clock (5x the parallel clock).
+    input  wire [9:0]  paralell_data,   // Input: 10-bit parallel data to be serialized.
+
+    // Output
+    output wire        serial_data_out  // Output: Single-bit high-speed serial data stream.
+);
     
-//wire define
-wire		cascade1;     //用于两个OSERDESE2级联的信号
-wire		cascade2;
-  
-//*****************************************************
-//**                    main code
-//***************************************************** 
+// Wires for cascading the two OSERDESE2 primitives.
+wire cascade1; // Carries data from the Slave to the Master.
+wire cascade2;
+ 
+//==============================================================================
+// Main Code
+//============================================================================== 
     
-//例化OSERDESE2原语，实现并串转换,Master模式
+// Instantiate the first OSERDESE2 primitive in MASTER mode.
+// The MASTER primitive handles the lower-order bits of the parallel word and
+// drives the final serial output pin (OQ).
 OSERDESE2 #(
-    .DATA_RATE_OQ   ("DDR"),       // 设置双倍数据速率
-    .DATA_RATE_TQ   ("SDR"),       // DDR, BUF, SDR
-    .DATA_WIDTH     (10),           // 输入的并行数据宽度为10bit
-    .SERDES_MODE    ("MASTER"),    // 设置为Master，用于10bit宽度扩展
-    .TBYTE_CTL      ("FALSE"),     // Enable tristate byte operation (FALSE, TRUE)
-    .TBYTE_SRC      ("FALSE"),     // Tristate byte source (FALSE, TRUE)
-    .TRISTATE_WIDTH (1)             // 3-state converter width (1,4)
+    .DATA_RATE_OQ  ("DDR"),       // Set output to Double Data Rate (data changes on both clock edges).
+    .DATA_RATE_TQ  ("SDR"),       // Tristate output rate (not used).
+    .DATA_WIDTH    (10),          // Total effective data width is 10 bits.
+    .SERDES_MODE   ("MASTER"),    // Set this instance as the MASTER in the cascade.
+    .TRISTATE_WIDTH(1)            // Width of the tristate control signal.
 )
 OSERDESE2_Master (
-    .CLK        (serial_clk_5x),    // 串行数据时钟,5倍时钟频率
-    .CLKDIV     (paralell_clk),     // 并行数据时钟
-    .RST        (reset),            // 1-bit input: Reset
-    .OCE        (1'b1),             // 1-bit input: Output data clock enable
+    // Clocking and Reset
+    .CLK          (serial_clk_5x),// High-speed clock (5x parallel clock).
+    .CLKDIV       (paralell_clk), // Low-speed parallel clock.
+    .RST          (reset),        // Reset input.
+    .OCE          (1'b1),         // Output Clock Enable, permanently enabled.
     
-    .OQ         (serial_data_out),  // 串行输出数据
+    // Serial Output
+    .OQ           (serial_data_out), // Final serialized data output.
     
-    .D1         (paralell_data[0]), // D1 - D8: 并行数据输入
-    .D2         (paralell_data[1]),
-    .D3         (paralell_data[2]),
-    .D4         (paralell_data[3]),
-    .D5         (paralell_data[4]),
-    .D6         (paralell_data[5]),
-    .D7         (paralell_data[6]),
-    .D8         (paralell_data[7]),
-   
-    .SHIFTIN1   (cascade1),         // SHIFTIN1 用于位宽扩展
-    .SHIFTIN2   (cascade2),         // SHIFTIN2
-    .SHIFTOUT1  (),                 // SHIFTOUT1: 用于位宽扩展
-    .SHIFTOUT2  (),                 // SHIFTOUT2
-        
-    .OFB        (),                 // 以下是未使用信号
-    .T1         (1'b0),             
-    .T2         (1'b0),
-    .T3         (1'b0),
-    .T4         (1'b0),
-    .TBYTEIN    (1'b0),             
-    .TCE        (1'b0),             
-    .TBYTEOUT   (),                 
-    .TFB        (),                 
-    .TQ         ()                  
+    // Parallel Data Inputs (D1-D8) for the Master stage
+    .D1           (paralell_data[0]),
+    .D2           (paralell_data[1]),
+    .D3           (paralell_data[2]),
+    .D4           (paralell_data[3]),
+    .D5           (paralell_data[4]),
+    .D6           (paralell_data[5]),
+    .D7           (paralell_data[6]),
+    .D8           (paralell_data[7]),
+    
+    // Cascade Interface
+    .SHIFTIN1     (cascade1),     // Input from the Slave's SHIFTOUT1.
+    .SHIFTIN2     (cascade2),     // Input from the Slave's SHIFTOUT2.
+    .SHIFTOUT1    (),             // Master's shift outputs are not used.
+    .SHIFTOUT2    (),
+    
+    // Unused Ports
+    .OFB          (), .T1(1'b0), .T2(1'b0), .T3(1'b0), .T4(1'b0), .TBYTEIN(1'b0), 
+    .TCE(1'b0), .TBYTEOUT(), .TFB(), .TQ()
 );
-   
-//例化OSERDESE2原语，实现并串转换,Slave模式
+    
+// Instantiate the second OSERDESE2 primitive in SLAVE mode.
+// The SLAVE primitive handles the higher-order bits and passes them internally
+// to the MASTER via the cascade shift ports.
 OSERDESE2 #(
-    .DATA_RATE_OQ   ("DDR"),       // 设置双倍数据速率
-    .DATA_RATE_TQ   ("SDR"),       // DDR, BUF, SDR
-    .DATA_WIDTH     (10),           // 输入的并行数据宽度为10bit
-    .SERDES_MODE    ("SLAVE"),     // 设置为Slave，用于10bit宽度扩展
-    .TBYTE_CTL      ("FALSE"),     // Enable tristate byte operation (FALSE, TRUE)
-    .TBYTE_SRC      ("FALSE"),     // Tristate byte source (FALSE, TRUE)
-    .TRISTATE_WIDTH (1)             // 3-state converter width (1,4)
+    .DATA_RATE_OQ  ("DDR"),
+    .DATA_RATE_TQ  ("SDR"),
+    .DATA_WIDTH    (10),
+    .SERDES_MODE   ("SLAVE")     // Set this instance as the SLAVE in the cascade.
 )
 OSERDESE2_Slave (
-    .CLK        (serial_clk_5x),    // 串行数据时钟,5倍时钟频率
-    .CLKDIV     (paralell_clk),     // 并行数据时钟
-    .RST        (reset),            // 1-bit input: Reset
-    .OCE        (1'b1),             // 1-bit input: Output data clock enable
+    // Clocking and Reset (same as Master)
+    .CLK          (serial_clk_5x),
+    .CLKDIV       (paralell_clk),
+    .RST          (reset),
+    .OCE          (1'b1),
     
-    .OQ         (),                 // 串行输出数据
+    // Serial Output
+    .OQ           (),             // Slave's direct serial output is not used.
     
-    .D1         (1'b0),             // D1 - D8: 并行数据输入
-    .D2         (1'b0),
-    .D3         (paralell_data[8]),
-    .D4         (paralell_data[9]),
-    .D5         (1'b0),
-    .D6         (1'b0),
-    .D7         (1'b0),
-    .D8         (1'b0),
-   
-    .SHIFTIN1   (),                 // SHIFTIN1 用于位宽扩展
-    .SHIFTIN2   (),                 // SHIFTIN2
-    .SHIFTOUT1  (cascade1),         // SHIFTOUT1: 用于位宽扩展
-    .SHIFTOUT2  (cascade2),         // SHIFTOUT2
-        
-    .OFB        (),                 // 以下是未使用信号
-    .T1         (1'b0),             
-    .T2         (1'b0),
-    .T3         (1'b0),
-    .T4         (1'b0),
-    .TBYTEIN    (1'b0),             
-    .TCE        (1'b0),             
-    .TBYTEOUT   (),                 
-    .TFB        (),                 
-    .TQ         ()                  
-);  
+    // Parallel Data Inputs (D1-D8) for the Slave stage
+    // Note how the higher-order bits are connected here.
+    .D1           (1'b0),
+    .D2           (1'b0),
+    .D3           (paralell_data[8]),
+    .D4           (paralell_data[9]),
+    .D5           (1'b0),
+    .D6           (1'b0),
+    .D7           (1'b0),
+    .D8           (1'b0),
+    
+    // Cascade Interface
+    .SHIFTIN1     (),
+    .SHIFTIN2     (),
+    .SHIFTOUT1    (cascade1),     // Output to the Master's SHIFTIN1.
+    .SHIFTOUT2    (cascade2),     // Output to the Master's SHIFTIN2.
+    
+    // Unused Ports
+    .OFB          (), .T1(1'b0), .T2(1'b0), .T3(1'b0), .T4(1'b0), .TBYTEIN(1'b0), 
+    .TCE(1'b0), .TBYTEOUT(), .TFB(), .TQ()
+);
         
 endmodule
